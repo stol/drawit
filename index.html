@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<!-- saved from url=(0054)http://devfiles.myopera.com/articles/649/example5.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <title>Dessine-moi un bouton</title>
+    <style type="text/css">
+      #container { position: relative; float: left;}
+      #imageView { border: 1px solid #000; }
+      #imageTemp { position: absolute; top: 1px; left: 1px; }
+      #wrapper{
+        width: 1106px;
+
+      }
+      #chat{
+        float: left;
+        width: 400px;
+        height: 300px;
+        border: 1px solid black;
+        clear: right;
+      }
+        #historique{
+          height: 280px;
+          overflow-y : scroll;
+        }
+        #input-text{
+          width: 380px;
+        }
+        #chat p{
+          padding: 0;
+          margin: 0;
+        }
+      #users{
+        width : 200px;
+        border: 1px solid black;
+        float: left;
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+        height: 300px;
+        overflow-y : scroll;
+      }
+      #users .is-user {
+        background-color: #dadada;
+      }
+
+      #color{
+        width: 400px;
+      }
+      #color > *{
+        display: block;
+        float: left;
+        height: 15px;
+        width: 15px;
+      }
+
+      #historique hr{
+        padding: 0; margin: 0;
+
+      }
+    </style>
+    <link rel="stylesheet" href="css/colorPicker.css">
+  </head>
+  <body>
+    <!--<h1>MAINTENANCE EN COURS - NE PAS UTILISER</h1>-->
+    <div id="wrapper">
+
+      <div id="header">
+        <form action="http://10.42.177.42:3000/chat" method="post" id="pseudo-form">
+          <p>Pseudo : <input type="text" id="pseudo" name="pseudo"/> <small>(appuyer sur [return] pour valider)</small></p>
+        </form>
+        <input type="button" name="action" value="Devenir le dessinateur" id="start"/>
+        <p id="infos">Aucune partie en cours</p>
+      </div>
+
+
+      <div id="container">
+        <canvas id="imageView" width="400" height="300">
+          <p>Unfortunately, your browser is currently unsupported by our web 
+          application.  We are sorry for the inconvenience. Please use one of the 
+          supported browsers listed below, or draw the image you want using an 
+          offline tool.</p>
+          <p>Supported browsers: <a href="http://www.opera.com/">Opera</a>, <a href="http://www.mozilla.com/">Firefox</a>, <a href="http://www.apple.com/safari">Safari</a>, and <a href="http://www.konqueror.org/">Konqueror</a>.</p>
+        </canvas>
+        <div id="color"></div>
+        <!--<br/><input type="submit" name="action" value="reset"/>-->
+      </div>
+
+      <div id="chat">
+        <div id="historique">
+
+        </div>
+
+        <form action="http://10.42.177.42:3000/chat" method="post" id="chat-form">
+          <input type="text" id="input-text" name="input_text"/>
+        </form>
+      </div>
+      <ul id="users">
+
+      </ul>
+    </div>
+
+
+<script src="js/jquery-1.7.2.min.js"></script>
+<script src="js/socket.io.min.js"></script>
+<script src="js/picker.min.js"></script>
+<script>
+$('#color').empty().addColorPicker({
+  clickCallback: function(c) {
+    color = c;
+  }
+});
+
+var socket = io.connect('http://10.42.177.42:3000');
+var context;
+var users = [];
+var can_draw = false;
+var color = "#000000";
+
+var canvas, canvaso, contexto;
+
+// Keep everything in anonymous function, called on window load.
+
+  // The active tool instance.
+  var tool;
+  var tool_default = 'pencil';
+
+  function init () {
+    // Find the canvas element.
+    canvaso = document.getElementById('imageView');
+    if (!canvaso) {
+      alert('Error: I cannot find the canvas element!');
+      return;
+    }
+
+    if (!canvaso.getContext) {
+      alert('Error: no canvas.getContext!');
+      return;
+    }
+
+    // Get the 2D canvas context.
+    contexto = canvaso.getContext('2d');
+    if (!contexto) {
+      alert('Error: failed to getContext!');
+      return;
+    }
+
+    // Add the temporary canvas.
+    var container = canvaso.parentNode;
+
+
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      if (!canvas) {
+        alert('Error: I cannot create a new canvas element!');
+        return;
+      }
+
+      canvas.id     = 'imageTemp';
+      canvas.width  = canvaso.width;
+      canvas.height = canvaso.height;
+      container.appendChild(canvas);
+
+      context = canvas.getContext('2d');
+  
+      // Attach the mousedown, mousemove and mouseup event listeners.
+      canvas.addEventListener('mousedown', ev_canvas, false);
+      canvas.addEventListener('mousemove', ev_canvas, false);
+      canvas.addEventListener('mouseup',   ev_canvas, false);
+      tool = new tools[tool_default]();
+    }
+    contexto.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.width = canvas.width;
+
+  }
+
+  // The general-purpose event handler. This function just determines the mouse 
+  // position relative to the canvas element.
+  function ev_canvas (ev) {
+    if (ev.layerX || ev.layerX == 0) { // Firefox
+      ev._x = ev.layerX;
+      ev._y = ev.layerY;
+    } else if (ev.offsetX || ev.offsetX == 0) { // Opera
+      ev._x = ev.offsetX;
+      ev._y = ev.offsetY;
+    }
+
+    // Call the event handler of the tool.
+    var func = tool[ev.type];
+    if (func) {
+      func(ev);
+    }
+  }
+
+  // This function draws the #imageTemp canvas on top of #imageView, after which 
+  // #imageTemp is cleared. This function is called each time when the user 
+  // completes a drawing operation.
+  function img_update () {
+    contexto.drawImage(canvas, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // This object holds the implementation of each drawing tool.
+  var tools = {};
+
+  // The drawing pencil.
+  tools.pencil = function () {
+    var tool = this;
+    this.started = false;
+    this.fromX = 0;
+    this.fromY = 0;
+
+    // This is called when you start holding down the mouse button.
+    // This starts the pencil drawing.
+    this.mousedown = function (ev) {
+        if (!can_draw){
+          return false;
+        }
+        context.beginPath();
+        context.moveTo(ev._x, ev._y);
+        tool.started = true;
+        this.fromX = ev._x;
+        this.fromY = ev._y;
+    };
+
+    // This function is called every time you move the mouse. Obviously, it only 
+    // draws if the tool.started state is set to true (when you are holding down 
+    // the mouse button).
+    this.mousemove = function (ev) {
+      if (tool.started) {
+        context.strokeStyle = color;
+        context.lineTo(ev._x, ev._y);
+        context.stroke();
+        var hop = {
+          fromX: this.fromX,
+          fromY: this.fromY,
+          toX  : ev._x,
+          toY  : ev._y,
+          color: color
+        }
+        can_draw && socket.emit('drawLine', hop);
+        this.fromX = ev._x
+        this.fromY = ev._y
+      }
+    };
+
+    // This is called when you release the mouse button.
+    this.mouseup = function (ev) {
+      if (tool.started) {
+        //tool.mousemove(ev);
+        tool.started = false;
+        img_update();
+      }
+    };
+  };
+
+
+  init();
+
+  // Envoi de message
+  $("#chat-form").on("submit", function(e){
+    e.preventDefault();
+    socket.emit('chat', {
+      input_text: $("#input-text").val()
+    });
+    $("#input-text").val("")
+  })
+
+  // Changemzent de pseudo
+  $("#pseudo-form").on("submit", function(e){
+    e.preventDefault();
+    socket.emit('pseudo', {
+      pseudo: $("#pseudo").val()
+    });
+  })
+
+
+  $("#start").on("click", function(e){
+    e.preventDefault(),
+    socket.emit('start');
+  })
+  $("#reset").on("click", function(e){
+    e.preventDefault();
+  })
+  //////////// SOCKETS ////////////
+  // Maj des users connectés
+  socket.on('pseudos', function (data) {
+    $("#users").empty();
+    $.each(data, function(id,user){
+      var $li = $('<li/>').text('('+user.score+') '+user.pseudo);
+      if (id == socket.socket.sessionid){
+        $li.addClass("is-user")
+
+      }
+      $("#users").append($li)
+    })
+  });
+
+  // Maj du dessin
+  socket.on('drawLine', function (data) {
+    context.beginPath();
+    context.strokeStyle = data.color;
+    context.moveTo(data.fromX, data.fromY);
+    context.lineTo(data.toX, data.toY);
+    context.stroke();
+  });
+
+  // Maj du chat
+  socket.on('chat', function (data) {
+    $("#historique").append($("<p/>").text(data.pseudo+" : "+data.input_text));
+    $("#historique").scrollTop($("#historique")[0].scrollHeight);
+  });
+
+  // Maj des rôles
+
+  socket.on('startAsDrawer', function (data) {
+    $("#infos").empty().html('Mot à dessiner : <b>'+data.mot+'</b>. Reste <b id="reste">'+60+'</b> secondes');
+    can_draw = true;
+    init();
+    $("#start").attr("disabled", "disabled");
+  });
+  socket.on('startAsGuesser', function (data) {
+    can_draw = false;
+    $("#infos").empty().html('<b>'+data.drawer+'</b> est en train de dessiner ! Reste <b id="reste">'+60+'</b> secondes');
+    init();
+    $("#start").attr("disabled", "disabled");
+  });
+
+  socket.on('updateTimer', function (data) {
+    if (!$("#reste").length){
+      $("#start").attr("disabled", "disabled");
+      $("#infos").empty().html('La partie a commencé ! Reste <b id="reste">'+data.time+'</b> secondes');
+    }
+    else
+      $("#reste").text(data.time);
+  });
+
+
+  socket.on('broadcast', function (data) {
+    var $p = $("<p/>").append($('<span/>').text(data.msg));
+    $("#historique").append('<hr/>', $p,'<hr/>');
+  });
+
+  socket.on('endGame', function (data) {
+    if (data.winner) {
+      $("#infos").empty().html('La partie est terminée ! le mot à deviner était <b>'+data.mot+'</b>. Bravo à <b>'+data.winner+'</b> qui l\'a trouvé !');
+    }
+    else{
+      $("#infos").empty().html('La partie est terminée ! le mot à deviner était <b>'+data.mot+'</b>');
+    }
+    can_draw = false;
+    $("#start").attr("disabled", false);
+  });
+
+
+</script>
+
+
+</body></html>
